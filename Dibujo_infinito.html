@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dibujo Profesional Infinito</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #ffffff;
+            font-family: Arial, sans-serif;
+        }
+        #toolbar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            background: #f0f0f0;
+            color: black;
+            padding: 10px;
+            box-sizing: border-box;
+            z-index: 10;
+            border-right: 1px solid #ccc;
+        }
+        #toolbar h3 {
+            margin-top: 0;
+        }
+        .tool {
+            display: block;
+            width: 100%;
+            margin: 5px 0;
+            padding: 12px 10px; /* Padding ajustado para mejor equilibrio */
+            background: #e0e0e0;
+            border: 1px solid #ccc;
+            color: black;
+            cursor: pointer;
+            border-radius: 5px;
+            font-size: 16px; /* Texto más grande */
+            font-weight: 500; /* Peso medio para profesionalismo */
+        }
+        .tool.active {
+            background: #007bff;
+            color: white;
+        }
+        #colorPicker {
+            width: 100%;
+            margin: 10px 0;
+        }
+        #palette {
+            display: flex;
+            flex-wrap: wrap;
+            margin: 10px 0;
+        }
+        .color {
+            width: 30px;
+            height: 30px;
+            margin: 2px;
+            cursor: pointer;
+            border-radius: 3px;
+            border: 1px solid #ccc;
+        }
+        #brushSize {
+            width: 100%;
+        }
+        #canvas {
+            cursor: crosshair;
+            display: block;
+            position: absolute;
+            top: 0;
+        }
+        #status {
+            position: absolute;
+            bottom: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            color: black;
+            padding: 5px 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+        #welcome {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            font-size: 24px;
+        }
+        #welcome button {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 18px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="welcome">
+        <div>
+            <p>¿Estás en celular o PC?</p>
+            <button id="pc">PC</button>
+            <button id="mobile">Celular</button>
+        </div>
+    </div>
+    <div id="toolbar" style="display: none;">
+        <h3>Herramientas</h3>
+        <button class="tool active" id="pencil">Lápiz</button>
+        <button class="tool" id="eraser">Borrador</button>
+        <button class="tool" id="line">Línea Recta</button>
+        <button class="tool" id="brush">Pincel Suave</button>
+        <button class="tool" id="hand">Mano</button>
+        
+        <h3>Color</h3>
+        <input type="color" id="colorPicker" value="#000000">
+        <div id="palette">
+            <div class="color" style="background: #000000;"></div>
+            <div class="color" style="background: #ffffff;"></div>
+            <div class="color" style="background: #ff0000;"></div>
+            <div class="color" style="background: #00ff00;"></div>
+            <div class="color" style="background: #0000ff;"></div>
+            <div class="color" style="background: #ffff00;"></div>
+            <div class="color" style="background: #ff00ff;"></div>
+            <div class="color" style="background: #00ffff;"></div>
+        </div>
+        
+        <h3>Grosor</h3>
+        <input type="range" id="brushSize" min="1" max="50" value="5">
+        
+        <button id="clear">Limpiar Todo</button>
+        <button id="save">Guardar</button>
+        <button id="load">Cargar</button>
+    </div>
+    
+    <canvas id="canvas" style="display: none;"></canvas>
+    <div id="status" style="display: none;">Herramienta: Lápiz | Zoom: 100% | Posición: 0,0</div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const toolbar = document.getElementById('toolbar');
+        const status = document.getElementById('status');
+        const welcome = document.getElementById('welcome');
+        const pcBtn = document.getElementById('pc');
+        const mobileBtn = document.getElementById('mobile');
+        const tools = document.querySelectorAll('.tool');
+        const colorPicker = document.getElementById('colorPicker');
+        const palette = document.getElementById('palette');
+        const brushSize = document.getElementById('brushSize');
+        const clearBtn = document.getElementById('clear');
+        const saveBtn = document.getElementById('save');
+        const loadBtn = document.getElementById('load');
+
+        let isMobile = false;
+        let toolbarWidth = 200;
+
+        // Pantalla de inicio
+        pcBtn.addEventListener('click', () => {
+            isMobile = false;
+            toolbarWidth = 200;
+            startApp();
+        });
+        mobileBtn.addEventListener('click', () => {
+            isMobile = true;
+            toolbarWidth = 150;
+            startApp();
+        });
+
+        function startApp() {
+            welcome.style.display = 'none';
+            toolbar.style.display = 'block';
+            canvas.style.display = 'block';
+            status.style.display = 'block';
+            toolbar.style.width = toolbarWidth + 'px';
+            canvas.style.left = toolbarWidth + 'px';
+            status.style.left = (toolbarWidth + 10) + 'px';
+            canvas.width = window.innerWidth - toolbarWidth;
+            canvas.height = window.innerHeight;
+            redraw();
+        }
+
+        // Configuración inicial
+        let isDrawing = false;
+        let currentTool = 'pencil';
+        let currentColor = '#000000';
+        let currentSize = 5;
+        let offsetX = 0;
+        let offsetY = 0;
+        let scale = 1;
+        let strokes = [];
+        let isPanning = false;
+        let startPanX, startPanY;
+        let lineStart = null;
+
+        // Función para redibujar
+        function redraw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            ctx.translate(offsetX, offsetY);
+            ctx.scale(scale, scale);
+            strokes.forEach(stroke => {
+                if (stroke.tool === 'eraser') {
+                    ctx.globalCompositeOperation = 'destination-out';
+                } else {
+                    ctx.globalCompositeOperation = 'source-over';
+                }
+                ctx.strokeStyle = stroke.color;
+                ctx.lineWidth = stroke.size;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.beginPath();
+                ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+                for (let i = 1; i < stroke.points.length; i++) {
+                    ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+                }
+                ctx.stroke();
+            });
+            ctx.restore();
+            updateStatus();
+        }
+
+        // Actualizar estado
+        function updateStatus() {
+            status.textContent = `Herramienta: ${currentTool.charAt(0).toUpperCase() + currentTool.slice(1)} | Zoom: ${(scale * 100).toFixed(0)}% | Posición: ${Math.round(-offsetX / scale)},${Math.round(-offsetY / scale)}`;
+        }
+
+        // Función para dibujar
+        function draw(e) {
+            if (!isDrawing || currentTool === 'line' || currentTool === 'hand') return;
+            const x = (e.clientX - toolbarWidth - offsetX) / scale;
+            const y = (e.clientY - offsetY) / scale;
+            if (!currentStroke) {
+                currentStroke = { points: [], color: currentColor, size: currentSize, tool: currentTool };
+                strokes.push(currentStroke);
+            }
+            currentStroke.points.push({ x, y });
+            redraw();
+        }
+
+        let currentStroke = null;
+
+        // Eventos del mouse
+        canvas.addEventListener('mousedown', (e) => {
+            const x = (e.clientX - toolbarWidth - offsetX) / scale;
+            const y = (e.clientY - offsetY) / scale;
+            if (currentTool === 'hand' || e.button === 1 || e.ctrlKey) {
+                isPanning = true;
+                startPanX = e.clientX - offsetX;
+                startPanY = e.clientY - offsetY;
+                canvas.style.cursor = 'grabbing';
+                return;
+            }
+            if (currentTool === 'line') {
+                if (!lineStart) {
+                    lineStart = { x, y };
+                } else {
+                    strokes.push({ points: [lineStart, { x, y }], color: currentColor, size: currentSize, tool: 'line' });
+                    lineStart = null;
+                    redraw();
+                }
+                return;
+            }
+            isDrawing = true;
+            currentStroke = null;
+        });
+        canvas.addEventListener('mousemove', (e) => {
+            if (isPanning) {
+                offsetX = e.clientX - startPanX;
+                offsetY = e.clientY - startPanY;
+                redraw();
+            } else {
+                draw(e);
+            }
+        });
+        canvas.addEventListener('mouseup', () => {
+            isDrawing = false;
+            isPanning = false;
+            currentStroke = null;
+            canvas.style.cursor = currentTool === 'hand' ? 'grab' : 'crosshair';
+        });
+        canvas.addEventListener('mouseout', () => {
+            isDrawing = false;
+            isPanning = false;
+            currentStroke = null;
+            canvas.style.cursor = currentTool === 'hand' ? 'grab' : 'crosshair';
+        });
+
+        // Zoom con rueda del mouse
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+            scale *= zoomFactor;
+            redraw();
+        });
+
+        // Soporte para toque
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const x = (touch.clientX - toolbarWidth - offsetX) / scale;
+            const y = (touch.clientY - offsetY) / scale;
+            if (e.touches.length === 2) {
+                const touch2 = e.touches[1];
+                const dist = Math.hypot(touch.clientX - touch2.clientX, touch.clientY - touch2.clientY);
+                if (!lastDist) lastDist = dist;
+                scale *= dist / lastDist;
+                lastDist = dist;
+                redraw();
+                return;
+            }
+            if (currentTool === 'hand') {
+                isPanning = true;
+                startPanX = touch.clientX - offsetX;
+                startPanY = touch.clientY - offsetY;
+                return;
+            }
+            isDrawing = true;
+            currentStroke = null;
+        });
+        let lastDist;
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            if (isPanning) {
+                offsetX = touch.clientX - startPanX;
+                offsetY = touch.clientY - startPanY;
+                redraw();
+            } else {
+                draw({ clientX: touch.clientX, clientY: touch.clientY });
+            }
+        });
+        canvas.addEventListener('touchend', () => {
+            isDrawing = false;
+            isPanning = false;
+            currentStroke = null;
+            lastDist = null;
+        });
+
+        // Herramientas
+        tools.forEach(tool => {
+            tool.addEventListener('click', () => {
+                tools.forEach(t => t.classList.remove('active'));
+                tool.classList.add('active');
+                currentTool = tool.id;
+                if (currentTool === 'eraser') {
+                    currentColor = '#ffffff';
+                } else {
+                    currentColor = colorPicker.value;
+                }
+                canvas.style.cursor = currentTool === 'hand' ? 'grab' : 'crosshair';
+            });
+        });
+
+        // Color picker
+        colorPicker.addEventListener('input', () => {
+            currentColor = colorPicker.value;
+        });
+
+        // Paleta
+        palette.addEventListener('click', (e) => {
+            if (e.target.classList.contains('color')) {
+                currentColor = e.target.style.background;
+                colorPicker.value = currentColor;
+            }
+        });
+
+        // Grosor
+        brushSize.addEventListener('input', () => {
+            currentSize = brushSize.value;
+        });
+
+        // Limpiar
+        clearBtn.addEventListener('click', () => {
+            strokes = [];
+            redraw();
+        });
+
+        // Guardar/Cargar
+        saveBtn.addEventListener('click', () => {
+            localStorage.setItem('drawing', JSON.stringify(strokes));
+            alert('Dibujo guardado!');
+        });
+        loadBtn.addEventListener('click', () => {
+            const data = localStorage.getItem('drawing');
+            if (data) {
+                strokes = JSON.parse(data);
+                redraw();
+                alert('Dibujo cargado!');
+            }
+        });
+
+        // Redimensionar
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth - toolbarWidth;
+            canvas.height = window.innerHeight;
+            redraw();
+        });
+    </script>
+</body>
+</html>
